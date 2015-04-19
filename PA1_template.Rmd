@@ -1,25 +1,231 @@
 ---
 title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+author: "https://github.com/rwgeorge/RepData_PeerAssessment1"
+date: "04/19/2015"
+output: html_document
+keep_md: true
 ---
 
 
-## Loading and preprocessing the data
+
+## Introduction
+##### (Provided with Assignment)
+
+It is now possible to collect a large amount of data about personal
+movement using activity monitoring devices such as a
+[Fitbit](http://www.fitbit.com), [Nike
+Fuelband](http://www.nike.com/us/en_us/c/nikeplus-fuelband), or
+[Jawbone Up](https://jawbone.com/up). These type of devices are part of
+the "quantified self" movement -- a group of enthusiasts who take
+measurements about themselves regularly to improve their health, to
+find patterns in their behavior, or because they are tech geeks. But
+these data remain under-utilized both because the raw data are hard to
+obtain and there is a lack of statistical methods and software for
+processing and interpreting the data.
+
+This assignment makes use of data from a personal activity monitoring
+device. This device collects data at 5 minute intervals through out the
+day. The data consists of two months of data from an anonymous
+individual collected during the months of October and November, 2012
+and include the number of steps taken in 5 minute intervals each day.
+
+## Basic Setup
+
+#### Libraries
+
+This assignment solution makes use of the following R packages:
+
+* **knitr**: Used to "knit" this R Markdown file
+* **dplyr**: Used for general data set manipulation
+* **lubridate**: Used to make working with dates and times easy
+* **ggplot2**: used for plotting
 
 
+```{r libraries, echo = TRUE, results = "hide", message = FALSE}
+library("knitr")
+library("dplyr")
+library("lubridate")
+library("ggplot2")
+```
+
+#### Directories
+
+The figures for this assignment are stored in the the **figure/** directory
+at the root of the working directory.
+
+```{r directories, echo = TRUE, results = "hide", message = FALSE}
+opts_chunk$set(echo = TRUE, results = "hide", fig.path = "figure/")
+```
+
+## Data
+##### (Provided with Assignment)
+
+The data for this assignment has been included as part of the Github fork
+created, but it still can be downloaded from the course web site.
+
+If you wish to download the data, go here:
+
+* Dataset: [Activity monitoring data](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip) [52K]
+
+The variables included in this dataset are:
+
+* **steps**: Number of steps taking in a 5-minute interval (missing values are coded as `NA`)
+
+* **date**: The date on which the measurement was taken in `YYYY-MM-DD` format
+
+* **interval**: Identifier for the 5-minute interval in which measurement was taken
+
+
+The dataset is stored in a comma-separated-value (CSV) file and there are a total of **17,568** observations in this dataset.
+
+### Loading & Preprocessing the Data
+
+The data needs to be in the working directory for the R code to run properly.
+This is automatic if the Github fork was used.  If the data is not in the working
+directory, the script will attempt to download it.
+
+#### Download the Data
+
+```{r downloading, echo = TRUE, results = "hide", message = FALSE}
+fileLocation <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip"
+fileName <- "activity.zip"
+if (!file.exists(fileName))
+  download.file(fileLocation, fileName, method = "curl")
+  
+fileDate <- format(file.info(fileName)$mtime, "%B %d, %Y at %H:%M:%S")
+```
+
+**`r fileName`** obtained on **`r fileDate`**.
+
+#### Unzip Data
+#####(making sure data file used actually comes form the archive)
+```{r unzipping, echo = TRUE, results = "hide", message = FALSE}
+unzip(fileName)
+```
+#### Read Raw Data
+```{r reading, echo = TRUE, results = "hide", message = FALSE}
+rawData <- read.csv("activity.csv", na.strings = "NA")
+```
+
+#### Preprocess Raw Data
+```{r preprocessing, echo = TRUE, results = "hide", message = FALSE}
+preprocessedData <- tbl_df(rawData)
+preprocessedData <- mutate(preprocessedData, date = ymd(date))
+```
 
 ## What is mean total number of steps taken per day?
 
+Mising values were ignored in the preprocessed data set.  The data was then grouped by date
+and summarized by adding all of the steps taken.
 
+#### Determine Number of Steps Per Day
+
+```{r determineSteps}
+stepsPerDay <- na.omit(preprocessedData)
+stepsPerDay <- group_by(stepsPerDay, date)
+stepsPerDay <- summarise(stepsPerDay, steps = sum(steps))
+```
+
+The mean and median number of steps per day was calculated.
+
+#### Mean & Median Steps Per Day
+```{r meanAndMedian}
+meanSteps <- mean(stepsPerDay$steps)
+medianSteps <- median(stepsPerDay$steps)
+```
+##### Total Steps Per Day Stats
+* Mean = `r as.integer(meanSteps)`
+* Median = `r as.integer(medianSteps)`
+
+#### Steps Per Day Histogram
+```{r StepsPerDayHistogram}
+ggplot(stepsPerDay, aes(date)) + ggtitle("Steps Per Day") + geom_histogram(stat = "identity", aes(y = steps)) + xlab("Day") + ylab("Number of Steps")
+```
 
 ## What is the average daily activity pattern?
 
+Mising values were ignored in the preprocessed data set.  The data was then grouped by interval
+and summarized by averaging all of the steps taken. 
 
+```{r determineAverages}
+averageStepsPerInterval <- na.omit(preprocessedData)
+averageStepsPerInterval <- group_by(averageStepsPerInterval, interval)
+summarise(averageStepsPerInterval, steps = mean(steps))
+```
 
-## Imputing missing values
+#### Determine Max Interval
+```{r determineMaxInterval}
+maxInterval <- averageStepsPerInterval$interval[which.max(averageStepsPerInterval$steps)]
+```
 
+The max interval was the `r maxInterval`th interval in the data set.
+
+#### Plot All Average Steps Per Interval
+```{r AverageStepsPerInterval}
+with(averageStepsPerInterval, {plot(interval, steps, type = "l", xaxt = "n")})
+```
+
+## Inputing Missing Values
+
+Note that there are a number of days/intervals where there are missing
+values (coded as `NA`). The presence of missing days may introduce
+bias into some calculations or summaries of the data.
+
+#### Count Missing Values
+
+```{r countMissingValues}
+missingValues <- sum(is.na(preprocessedData))
+```
+
+There were `r missingValues` in the data set.
+
+#### Replace Missing Values
+
+All missing values in the data set (`NA`) were replaced with the mean of the interval in which the value would have existed.
+
+```{r replaceAllMissingValues}
+
+resultData <- preprocessedData
+
+naIndices <- which(is.na(resultData$steps), arr.ind = TRUE)
+count <- length(naIndices)
+for (i in 1 : count) {
+  resultData$steps[naIndices[i]] <- averageStepsPerInterval$steps[averageStepsPerInterval$interval == resultData$interval[naIndices[i]]]
+}
+
+resultData <- group_by(resultData, date)
+resultData <- summarise(resultData, steps = sum(steps))
+```
+
+There was a problem in the replacement as can be seen by the warnings.
+
+#### Determine New Averages
+
+```{r calculateNewAverages}
+newAverageStepsPerDay <- mean(resultData$steps)
+newMedianStepsPerDay <- median(resultData$steps)
+```
+
+The new averages for replaced values were as follows:
+* Mean = `r as.integer(newAverageStepsPerDay)`
+* Median = `r as.integer(newMedianStepsPerDay)`
+
+There was an increase in the daily step totals because all missing data was replaced with mean data.  There was little difference between the originial set averages and the new set averages due to the fact that the mean value was used to replace missing values.
+
+#### Plot of Total Number of Steps Taken Each Day
+##### (with replaced data)
+
+Histogram of the total number of steps taken each day:
+
+```{r NewHistogram}
+ggplot(resultData, aes(date)) + ggtitle("Steps Per Day") + geom_histogram(stat = "identity", aes(y = steps)) + xlab("Day") + ylab("Number of Steps") 
+```
 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+```{r weekdayWeekend}
+days <- resultData
+days <- mutate(days, weekday = ifelse(weekdays(date) != "Saturday" & weekdays(date) != "Sunday", "weekday", "weekend"))
+```
+There were differences.  As can be seen, the plotting did not turn out and had to be removed from the calculations for this report.
